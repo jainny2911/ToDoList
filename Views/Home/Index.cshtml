@@ -1,0 +1,189 @@
+﻿@{
+    ViewData["Title"] = "ToDo List";
+}
+
+<h2>Dynamic To-Do List</h2>
+
+<button id="addRowBtn">+</button>
+<button id="exportBtn">Export</button>
+<button id="sendAllBtn" style="display:none;">Send All</button>
+
+<table id="todoTable" border="1" style="width:100%; margin-top:10px;">
+    <thead>
+        <tr>
+            <th>Select</th>
+            <th>ID</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+    const table = document.getElementById('todoTable').getElementsByTagName('tbody')[0];
+    const sendAllBtn = document.getElementById('sendAllBtn');
+
+    document.getElementById('addRowBtn').addEventListener('click', () => {
+        const row = table.insertRow();
+
+        // Checkbox
+        const checkboxCell = row.insertCell();
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.disabled = true;
+        checkbox.className = 'selectRow';
+        checkbox.addEventListener('change', handleCheckboxChange);
+        checkboxCell.appendChild(checkbox);
+
+        // ID input
+        const idCell = row.insertCell();
+        const idInput = document.createElement('input');
+        idInput.type = 'text';
+        idInput.oninput = () => checkRowFilled(row);
+        idCell.appendChild(idInput);
+
+        // Description input
+        const descCell = row.insertCell();
+        const descInput = document.createElement('input');
+        descInput.type = 'text';
+        descInput.oninput = () => checkRowFilled(row);
+        descCell.appendChild(descInput);
+
+        // Status dropdown
+        const statusCell = row.insertCell();
+        const statusSelect = document.createElement('select');
+        ["Pending", "Done", "InProgress"].forEach(status => {
+            const option = document.createElement('option');
+            option.value = status;
+            option.textContent = status;
+            statusSelect.appendChild(option);
+        });
+        statusCell.appendChild(statusSelect);
+
+        // Row-level Send button
+        const sendBtnCell = row.insertCell();
+        const rowSendBtn = document.createElement('button');
+        rowSendBtn.textContent = 'Send';
+        rowSendBtn.disabled = true;
+        rowSendBtn.style.display = 'none';
+        rowSendBtn.addEventListener('click', () => sendMail([{
+            id: idInput.value.trim(),
+            description: descInput.value.trim(),
+            status: statusSelect.value
+        }]));
+        sendBtnCell.appendChild(rowSendBtn);
+    });
+
+        function checkRowFilled(row) {
+        const idVal = row.cells[1].children[0].value.trim();
+        const descVal = row.cells[2].children[0].value.trim();
+        const checkbox = row.cells[0].children[0];
+        const rowSendBtn = row.cells[4].children[0];
+
+        if (idVal && descVal) {
+            checkbox.disabled = false;
+            rowSendBtn.disabled = false;
+        } else {
+            checkbox.checked = false;
+            checkbox.disabled = true;
+            rowSendBtn.disabled = true;
+        }
+
+        handleCheckboxChange();
+    }
+
+
+        function handleCheckboxChange() {
+        const checkboxes = document.querySelectorAll('.selectRow');
+        const checked = document.querySelectorAll('.selectRow:checked');
+
+        if (checked.length > 1) {
+            sendAllBtn.style.display = 'inline-block';
+        } else {
+            sendAllBtn.style.display = 'none';
+        }
+
+        // Control row-level Send button visibility
+        for (let row of table.rows) {
+            const checkbox = row.cells[0].children[0];
+            const idVal = row.cells[1].children[0].value.trim();
+            const descVal = row.cells[2].children[0].value.trim();
+            const rowSendBtn = row.cells[4].children[0];
+
+            if (checkbox.checked && idVal && descVal) {
+                rowSendBtn.style.display = 'inline-block';
+            } else {
+                rowSendBtn.style.display = 'none';
+            }
+        }
+    }
+
+
+    function hideRowSendButtons() {
+        for (let row of table.rows) {
+            row.cells[4].children[0].style.display = 'none';
+        }
+    }
+
+    function showRowSendButtons() {
+        for (let row of table.rows) {
+            const checkbox = row.cells[0].children[0];
+            const rowSendBtn = row.cells[4].children[0];
+            const idVal = row.cells[1].children[0].value.trim();
+            const descVal = row.cells[2].children[0].value.trim();
+
+            if (idVal && descVal) {
+                rowSendBtn.style.display = 'inline-block';
+            } else {
+                rowSendBtn.style.display = 'none';
+            }
+        }
+    }
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        const wb = XLSX.utils.book_new();
+        const wsData = [["ID", "Description", "Status"]];
+        for (let row of table.rows) {
+            const id = row.cells[1].children[0].value.trim();
+            const desc = row.cells[2].children[0].value.trim();
+            const status = row.cells[3].children[0].value;
+            if (id && desc) {
+                wsData.push([id, desc, status]);
+            }
+        }
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, "ToDoList");
+        XLSX.writeFile(wb, "ToDoList.xlsx");
+    });
+
+    sendAllBtn.addEventListener('click', () => {
+        const selectedRows = [];
+        for (let row of table.rows) {
+            const checkbox = row.cells[0].children[0];
+            if (checkbox.checked) {
+                const id = row.cells[1].children[0].value.trim();
+                const desc = row.cells[2].children[0].value.trim();
+                const status = row.cells[3].children[0].value;
+                selectedRows.push({ id, description: desc, status });
+            }
+        }
+        sendMail(selectedRows);
+    });
+
+    function sendMail(data) {
+        fetch('/Home/SendEmail', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.text())
+        .then(msg => alert("✅ " + msg))
+        .catch(err => alert("❌ Error: " + err));
+    }
+</script>
